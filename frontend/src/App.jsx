@@ -18,7 +18,7 @@ function App() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved' | 'error'
+  const [saveStatus, setSaveStatus] = useState('idle');
   const [listLoading, setListLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -26,37 +26,17 @@ function App() {
   const debouncedTitle = useDebounce(title, AUTOSAVE_DELAY);
   const debouncedSearch = useDebounce(searchQuery, SEARCH_DELAY);
 
-  // Apply theme to document root
+  // Theme
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Load note list on mount
-  useEffect(() => {
-    loadNotes();
-  }, []);
+  // =========================
+  // FIXED FUNCTIONS (useCallback)
+  // =========================
 
-  // Trigger search when debounced query changes
-  useEffect(() => {
-    if (debouncedSearch.trim()) {
-      handleSearch(debouncedSearch);
-    } else {
-      loadNotes();
-    }
-  }, [debouncedSearch]);
-
-  // Auto-save when debounced values change (only when a note is open)
-  useEffect(() => {
-    if (!activeNote) return;
-    const isDirty =
-      debouncedContent !== activeNote.content || debouncedTitle !== activeNote.title;
-    if (!isDirty) return;
-
-    saveNote(activeNote.id, debouncedTitle, debouncedContent);
-  }, [debouncedContent, debouncedTitle]);
-
-  async function loadNotes() {
+  const loadNotes = useCallback(async () => {
     try {
       setListLoading(true);
       const data = await notesApi.getAll();
@@ -67,19 +47,75 @@ function App() {
     } finally {
       setListLoading(false);
     }
-  }
+  }, []);
 
-  async function handleSearch(q) {
+  const handleSearch = useCallback(async (q) => {
     try {
       const data = await notesApi.search(q);
       setNotes(data);
     } catch {
-      // Silently fall back to showing all notes on search error
       loadNotes();
     }
-  }
+  }, [loadNotes]);
 
-  async function handleSelectNote(id) {
+  const saveNote = useCallback(async (id, newTitle, newContent) => {
+    setSaveStatus('saving');
+    try {
+      const updated = await notesApi.update(id, {
+        title: newTitle,
+        content: newContent,
+      });
+
+      setActiveNote(updated);
+
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? { id: updated.id, title: updated.title, updated_at: updated.updated_at }
+            : n
+        )
+      );
+
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch {
+      setSaveStatus('error');
+    }
+  }, []);
+
+  // =========================
+  // EFFECTS (FIXED)
+  // =========================
+
+  useEffect(() => {
+    loadNotes();
+  }, [loadNotes]);
+
+  useEffect(() => {
+    if (debouncedSearch.trim()) {
+      handleSearch(debouncedSearch);
+    } else {
+      loadNotes();
+    }
+  }, [debouncedSearch, handleSearch, loadNotes]);
+
+  useEffect(() => {
+    if (!activeNote) return;
+
+    const isDirty =
+      debouncedContent !== activeNote.content ||
+      debouncedTitle !== activeNote.title;
+
+    if (!isDirty) return;
+
+    saveNote(activeNote.id, debouncedTitle, debouncedContent);
+  }, [debouncedContent, debouncedTitle, activeNote, saveNote]);
+
+  // =========================
+  // HANDLERS
+  // =========================
+
+  const handleSelectNote = async (id) => {
     try {
       const note = await notesApi.getById(id);
       setActiveNote(note);
@@ -89,15 +125,20 @@ function App() {
     } catch {
       setError('Failed to load note.');
     }
-  }
+  };
 
-  async function handleCreateNote() {
+  const handleCreateNote = async () => {
     try {
       const note = await notesApi.create({
         title: 'Untitled Note',
         content: '# Untitled Note\n\nStart writing here…',
       });
-      setNotes((prev) => [{ id: note.id, title: note.title, updated_at: note.updated_at }, ...prev]);
+
+      setNotes((prev) => [
+        { id: note.id, title: note.title, updated_at: note.updated_at },
+        ...prev,
+      ]);
+
       setActiveNote(note);
       setTitle(note.title);
       setContent(note.content);
@@ -106,13 +147,16 @@ function App() {
     } catch {
       setError('Failed to create note.');
     }
-  }
+  };
 
-  async function handleDeleteNote(id, noteTitle) {
+  const handleDeleteNote = async (id, noteTitle) => {
     if (!window.confirm(`Delete "${noteTitle}"? This cannot be undone.`)) return;
+
     try {
       await notesApi.remove(id);
+
       setNotes((prev) => prev.filter((n) => n.id !== id));
+
       if (activeNote?.id === id) {
         setActiveNote(null);
         setTitle('');
@@ -122,26 +166,14 @@ function App() {
     } catch {
       setError('Failed to delete note.');
     }
-  }
+  };
 
-  const saveNote = useCallback(async (id, newTitle, newContent) => {
-    setSaveStatus('saving');
-    try {
-      const updated = await notesApi.update(id, { title: newTitle, content: newContent });
-      setActiveNote(updated);
-      setNotes((prev) =>
-        prev.map((n) =>
-          n.id === id ? { id: updated.id, title: updated.title, updated_at: updated.updated_at } : n
-        )
-      );
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch {
-      setSaveStatus('error');
-    }
-  }, []);
+  const handleToggleTheme = () =>
+    setTheme((t) => (t === 'light' ? 'dark' : 'light'));
 
-  const handleToggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'));
+  // =========================
+  // UI
+  // =========================
 
   return (
     <div className="app">
@@ -155,13 +187,13 @@ function App() {
       )}
 
       <div className="workspace">
-        {/* Sidebar */}
         <aside className="sidebar">
           <SearchBar
             value={searchQuery}
             onChange={setSearchQuery}
             onClear={() => setSearchQuery('')}
           />
+
           <NotesList
             notes={notes}
             activeId={activeNote?.id}
@@ -172,7 +204,6 @@ function App() {
           />
         </aside>
 
-        {/* Main editing area */}
         <main className="main-area">
           {activeNote ? (
             <>
@@ -190,7 +221,7 @@ function App() {
               <div className="empty-state-inner">
                 <span className="empty-state-icon">📄</span>
                 <h2>No note selected</h2>
-                <p>Choose a note from the sidebar or create a new one to get started.</p>
+                <p>Choose a note or create a new one.</p>
                 <button className="btn-primary" onClick={handleCreateNote}>
                   + Create your first note
                 </button>
