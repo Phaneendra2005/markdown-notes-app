@@ -6,7 +6,7 @@ const api = axios.create({
   timeout: 10000,
 });
 
-const unwrap = (response) => response.data.data;
+const unwrap = (response) => response.data;
 
 export const notesApi = {
   getAll: () => api.get('/notes').then(unwrap),
