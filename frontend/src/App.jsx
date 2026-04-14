@@ -33,7 +33,7 @@ function App() {
   }, [theme]);
 
   // =========================
-  // FIXED FUNCTIONS (useCallback)
+  // CALLBACK FUNCTIONS
   // =========================
 
   const loadNotes = useCallback(async () => {
@@ -43,7 +43,7 @@ function App() {
       setNotes(data);
       setError(null);
     } catch {
-      setError('Failed to load notes. Is the server running?');
+      setError('Failed to load notes.');
     } finally {
       setListLoading(false);
     }
@@ -84,13 +84,15 @@ function App() {
   }, []);
 
   // =========================
-  // EFFECTS (FIXED)
+  // EFFECTS
   // =========================
 
+  // Load notes on mount
   useEffect(() => {
     loadNotes();
   }, [loadNotes]);
 
+  // Search
   useEffect(() => {
     if (debouncedSearch.trim()) {
       handleSearch(debouncedSearch);
@@ -99,6 +101,7 @@ function App() {
     }
   }, [debouncedSearch, handleSearch, loadNotes]);
 
+  // Auto-save
   useEffect(() => {
     if (!activeNote) return;
 
