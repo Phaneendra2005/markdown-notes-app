@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Navbar from './components/Navbar';
 import NotesList from './components/NotesList';
 import SearchBar from './components/SearchBar';
-import Editor from './components/Editor';
+import Editor from "./components/Editor";
 import Preview from './components/Preview';
 import useDebounce from './hooks/useDebounce';
 import { notesApi } from './api/notesApi';
